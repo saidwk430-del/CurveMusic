@@ -16,37 +16,64 @@ button{font:inherit;border:1px solid var(--mut);background:var(--bg);color:var(-
 button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 label{display:flex;align-items:center;gap:8px;font-size:14px;width:100%}
 input[type=range]{flex:1;accent-color:var(--acc)}
-#hint{font-size:13px;color:var(--mut);text-align:center}
+#snd{max-height:34vh;overflow:auto;background:var(--pn);padding:0 12px 10px}#snd[hidden]{display:none}#hint{font-size:13px;color:var(--mut);text-align:center}
 </style></head><body>
 <div id="top"><span id="sc">النقاط: 0</span><span id="st"></span></div>
 <canvas id="c"></canvas>
-<div id="bar"><div class="row" id="modes"></div><div id="ctl"></div><div id="hint"></div></div>
+<div id="bar"><div class="row" id="modes"></div><div id="ctl"></div><div id="hint"></div></div><div id="snd" hidden></div>
 <script>
 const C=document.getElementById('c'),g=C.getContext('2d'),$=id=>document.getElementById(id);
 let dpr=devicePixelRatio||1,col={};
 function rs(){C.width=C.clientWidth*dpr;C.height=C.clientHeight*dpr;const s=getComputedStyle(document.documentElement);['bg','fg','mut','acc','dot'].forEach(k=>col[k]=s.getPropertyValue('--'+k).trim())}
 addEventListener('resize',rs);matchMedia('(prefers-color-scheme:dark)').addEventListener('change',rs);
 const CV=[
-{f:x=>2.5*Math.sin(x)},
-{f:x=>1.8*Math.sin(x)+1.2*Math.sin(2.5*x)},
-{f:x=>x*x*x/40-x/2},
-{f:x=>2*Math.sin(x)+(Math.floor(x/2)%2?1.5:-1.5),j:[-4,-2,0,2,4]},
-{f:x=>((x%2)+2)%2*2-2+Math.sin(3*x)*.5,j:[-4,-2,0,2,4]}];
+{n:'y = 2.5 sin x',f:x=>2.5*Math.sin(x)},
+{n:'y = 1.8 sin x + 1.2 sin 2.5x',f:x=>1.8*Math.sin(x)+1.2*Math.sin(2.5*x)},
+{n:'y = x³/40 − x/2',f:x=>x*x*x/40-x/2},
+{n:'y = 2 sin x ± 1.5',f:x=>2*Math.sin(x)+(Math.floor(x/2)%2?1.5:-1.5),j:[-4,-2,0,2,4]},
+{n:'y = saw + 0.5 sin 3x',f:x=>((x%2)+2)%2*2-2+Math.sin(3*x)*.5,j:[-4,-2,0,2,4]},
+{n:'y = tan(x²/3)',f:x=>Math.tan(x*x/3)},
+{n:'y = tan(x)',f:x=>Math.tan(x)},
+{n:'y = 3 sin(x²/4)',f:x=>3*Math.sin(x*x/4)}];
+const ZN=[0,1,2,5,6,7];
 let mode='zen',ci=0,x=-6,spi=0,score=0,combo=0,A=1,B=1,ta=2,tb=1,hits={},solved=false,flash=0;
 const SP=[1,2,.4],DG=[0,2,4,7,9];let ac;
-function aud(){if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state=='suspended')ac.resume()}
+function aud(){if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state=='suspended')ac.resume();voice()}
 function tone(f,d=.35,v=.16,t='triangle'){if(!ac)return;const o=ac.createOscillator(),n=ac.createGain(),s=ac.currentTime;o.type=t;o.frequency.value=f;n.gain.setValueAtTime(0,s);n.gain.linearRampToValueAtTime(v,s+.02);n.gain.exponentialRampToValueAtTime(.001,s+d);o.connect(n).connect(ac.destination);o.start(s);o.stop(s+d+.05)}
+const S={wave:'sawtooth',sc:0,cut:2200,port:.02,spd:1,base:45,oct:3.5,lay:1,vib:0,echo:0,vol:.11};
+const SCS=[null,[0,2,4,7,9],[0,1,2,3,4,5,6,7,8,9,10,11],[0,2,4,5,7,9,11],[0,1,4,5,7,8,10]],RT=[1,2,1.5];
+let vo=[],vg,vf,lg=[],wet,py=0;
+function pw(h){const re=new Float32Array(h.length+1),im=new Float32Array(h.length+1);h.forEach((a,i)=>im[i+1]=a);return ac.createPeriodicWave(re,im)}
+const PW={organ:[1,.6,.4,.3,.2,.1],glass:[1,0,.7,0,.5,0,.6,0,.3],nasal:[.3,1,.2,.9,.1,.8]};
+function voice(){if(vo.length||!ac)return;vf=ac.createBiquadFilter();vf.type='lowpass';vg=ac.createGain();vg.gain.value=0;vf.connect(vg);vg.connect(ac.destination);
+ const dl=ac.createDelay(1),fb=ac.createGain();dl.delayTime.value=.28;fb.gain.value=.4;wet=ac.createGain();vg.connect(dl);dl.connect(fb);fb.connect(dl);dl.connect(wet);wet.connect(ac.destination);
+ const lfo=ac.createOscillator(),lv=ac.createGain();lfo.frequency.value=5.5;lfo.connect(lv);lfo.start();window.lv=lv;
+ for(let i=0;i<3;i++){const o=ac.createOscillator(),l=ac.createGain();o.connect(l);l.connect(vf);lv.connect(o.detune);o.start();vo.push(o);lg.push(l)}apply()}
+function apply(){if(!vo.length)return;const t=ac.currentTime;vo.forEach(o=>{if(PW[S.wave])o.setPeriodicWave(pw(PW[S.wave]));else o.type=S.wave});
+ vf.frequency.setTargetAtTime(S.cut,t,.03);lg.forEach((l,i)=>l.gain.setTargetAtTime(i==0?1:(S.lay>i?(i==1?.5:.4):0),t,.03));wet.gain.setTargetAtTime(S.echo,t,.05);lv.gain.setTargetAtTime(S.vib*40,t,.05)}
+function snap(m){const d=SCS[S.sc],o=Math.floor(m/12),r=m-12*o;let best=0,bd=99;for(const k of d.concat(12)){if(Math.abs(k-r)<bd){bd=Math.abs(k-r);best=k}}return 12*o+best}
+function vupd(y){if(!vo.length)return;const t=ac.currentTime,bad=!isFinite(y)||Math.abs(y)>4.2||Math.abs(y-py)>2.5;py=y;
+ if(bad){vg.gain.setTargetAtTime(0,t,.008);return}
+ let m=S.base+(Math.max(-4,Math.min(4,y))+4)/8*S.oct*12;if(S.sc)m=snap(m);const f=440*Math.pow(2,(m-69)/12);
+ vo.forEach((o,i)=>o.frequency.setTargetAtTime(f*RT[i],t,S.port));vg.gain.setTargetAtTime(S.vol,t,.01)}
+const WV=[['sine','ناعم'],['triangle','دافئ'],['sawtooth','حادّ'],['square','مربّع'],['organ','أرغن'],['glass','زجاج'],['nasal','أنفي']],SCN=['متصل','خماسي','كروماتي','ماجور','حجاز'],
+SL=[['cut','حدّة',300,9000,50],['port','ليونة',.003,.3,.003],['spd','السرعة',.2,4,.05],['base','الطبقة',24,84,1],['oct','المدى (أوكتاف)',1,6,.5],['lay','طبقات',1,3,1],['vib','اهتزاز',0,1,.05],['echo','صدى',0,.8,.05],['vol','الصوت',.02,.3,.01]];
+function setS(k,v){S[k]=v;apply();mark()}
+function mark(){document.querySelectorAll('[data-w]').forEach(b=>b.classList.toggle('on',b.dataset.w==S.wave));document.querySelectorAll('[data-s]').forEach(b=>b.classList.toggle('on',+b.dataset.s==S.sc))}
+function rnd(a,b){return a+Math.random()*(b-a)}
+function surprise(){S.wave=WV[Math.random()*7|0][0];S.sc=Math.random()*5|0;S.cut=rnd(500,7000);S.base=Math.round(rnd(28,72));S.oct=Math.round(rnd(1,5)*2)/2;S.lay=1+(Math.random()*3|0);S.vib=rnd(0,.6);S.echo=rnd(0,.5);S.port=rnd(.005,.15);buildSnd();apply()}
+function buildSnd(){$('snd').innerHTML='<div class="row"><button onclick="surprise()">🎲 مفاجأة</button></div><div class="row">'+WV.map(([k,n])=>`<button data-w="${k}" onclick="setS('wave','${k}')">${n}</button>`).join('')+'</div><div class="row">'+SCN.map((n,i)=>`<button data-s="${i}" onclick="setS('sc',${i})">${n}</button>`).join('')+'</div>'+SL.map(([k,n,a,b,st])=>`<label>${n}<input type="range" min="${a}" max="${b}" step="${st}" value="${S[k]}" oninput="setS('${k}',+this.value)"></label>`).join('');mark()}
 function fr(y){const i=Math.max(0,Math.min(14,Math.round((y+4)/8*14))),m=48+12*Math.floor(i/5)+DG[i%5];return 440*Math.pow(2,(m-69)/12)}
 const F=v=>mode=='puzzle'?A*Math.sin(B*v):CV[ci].f(v);
 function setMode(m){mode=m;spi=0;x=-6;hits={};combo=0;solved=false;
- if(m=='rhythm')ci=3+Math.floor(Math.random()*2);else if(m=='zen')ci=Math.floor(Math.random()*3);
+ if(m=='rhythm')ci=3+Math.floor(Math.random()*2);else if(m=='zen')ci=ZN[Math.floor(Math.random()*ZN.length)];
  if(m=='puzzle')newPuz();ui()}
 function newPuz(){ta=[1,1.5,2,2.5,3][Math.random()*5|0];tb=[.5,1,1.5,2][Math.random()*4|0];A=1;B=.3+Math.random()*0.1;solved=false}
 function err(){let e=0;for(let i=0;i<41;i++){const v=-6+i*.3;e+=Math.abs(A*Math.sin(B*v)-ta*Math.sin(tb*v))}return e/41}
 function ui(){
- $('modes').innerHTML=[['zen','استرخاء'],['puzzle','لغز'],['rhythm','إيقاع']].map(([k,n])=>`<button class="${k==mode?'on':''}" onclick="setMode('${k}')">${n}</button>`).join('');
+ $('modes').innerHTML=[['zen','استرخاء'],['puzzle','لغز'],['rhythm','إيقاع']].map(([k,n])=>`<button class="${k==mode?'on':''}" onclick="setMode('${k}')">${n}</button>`).join('')+'<button onclick="$(\'snd\').hidden=!$(\'snd\').hidden">⚙ الصوت</button>';
  let h='',t='';
- if(mode=='zen'){h='<div class="row"><button onclick="ci=(ci+1)%3;x=-6">منحنى آخر</button></div>';t='المس الشاشة لتغيير السرعة'}
+ if(mode=='zen'){h='<div class="row"><button onclick="ci=ZN[(ZN.indexOf(ci)+1)%ZN.length];x=-6">منحنى آخر</button></div>';t='المس الشاشة لتغيير السرعة'}
  if(mode=='puzzle'){h='<label>السعة <input type="range" min=".3" max="3.5" step=".05" value="'+A+'" oninput="A=+this.value;chk()"></label><label>التردد <input type="range" min=".3" max="2.5" step=".05" value="'+B+'" oninput="B=+this.value;chk()"></label>';t='طابق المنحنى الرمادي بتعديل المتغيرين'}
  if(mode=='rhythm')t='المس الشاشة لحظة قفز النقطة (الدوائر)';
  $('ctl').innerHTML=h;$('hint').textContent=t}
@@ -65,13 +92,14 @@ function draw(){const w=C.width,h=C.height,X=v=>(v+6)/12*w,Y=v=>h-(v+4)/8*h;
  if(mode=='rhythm')for(const j of CV[ci].j){g.strokeStyle=hits[j]==1?col.acc:col.fg;g.lineWidth=2*dpr;g.beginPath();g.arc(X(j),Y(F(j+.001)),14*dpr,0,7);g.stroke()}
  g.fillStyle=col.dot;g.beginPath();g.arc(X(x),Y(F(x)),9*dpr,0,7);g.fill();
  if(flash>0){g.strokeStyle=col.acc;g.lineWidth=3*dpr;g.beginPath();g.arc(X(x),Y(F(x)),(9+(1-flash)*30)*dpr,0,7);g.stroke();flash-=.06}
+ g.fillStyle=col.fg;g.textAlign='center';g.font=(20*dpr)+'px serif';g.fillText(mode=='puzzle'?'y = A sin(Bx)':CV[ci].n,w/2,h-8*dpr);
  $('sc').textContent='النقاط: '+score;
  $('st').textContent=mode=='rhythm'?'تتابع ×'+combo:mode=='puzzle'?(solved?'أحسنت!':'الفرق: '+err().toFixed(2)):'السرعة ×'+SP[spi]}
 let last=performance.now();
-function loop(n){const dt=Math.min(.05,(n-last)/1000);last=n;const p=x;x+=1.6*SP[spi]*dt;
+function loop(n){const dt=Math.min(.05,(n-last)/1000);last=n;const p=x;x+=1.6*SP[spi]*S.spd*dt;
  if(x>6){x=-6;hits={}}
- else if(Math.floor(x/.5)!=Math.floor(p/.5))tone(fr(F(x)));
+ else vupd(F(x));
  if(mode=='rhythm')for(const j of CV[ci].j)if(x>j+.4&&!hits[j]){hits[j]=2;combo=0}
  draw();requestAnimationFrame(loop)}
-rs();ui();requestAnimationFrame(loop);
+rs();ui();buildSnd();requestAnimationFrame(loop);
 </script></body></html>
